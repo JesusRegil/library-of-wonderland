@@ -5,12 +5,13 @@ name: Publicar imagen Docker
 #        docker compose up -d
 # (No requiere secretos: usa el GITHUB_TOKEN del propio repositorio.)
 #
-# IMPORTANTE, solo la primera vez: en GitHub ve a tu perfil -> Packages -> library-of-wonderland ->
-# Package settings -> "Change visibility" -> Public, para que se pueda descargar sin iniciar sesion.
+# La imagen queda publica por si sola cuando el repositorio es publico. Si tu repositorio es privado, en GitHub ve a tu perfil ->
+# Packages -> library-of-wonderland -> Package settings -> "Change visibility" -> Public, para descargarla sin iniciar sesion.
 
 on:
   push:
     branches: [main, master]
+    paths-ignore: ["**.md", "docs/**"]
     tags: ["v*"]
   workflow_dispatch:
 

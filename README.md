@@ -85,7 +85,7 @@ El repositorio incluye el flujo [`.github/workflows/docker-publish.yml`](.github
 
 1. Sube el proyecto a tu repositorio de GitHub (rama `main`).
 2. Pestaña **Actions** → espera a que termine *Publicar imagen Docker*.
-3. **Solo la primera vez:** tu perfil → *Packages* → `library-of-wonderland` → *Package settings* → *Change visibility* → **Public**.
+3. La imagen queda **pública** por sí sola cuando el repositorio es público (hereda su visibilidad). Si tu repositorio es privado, o `docker compose pull` dice `unauthorized`: tu perfil → *Packages* → `library-of-wonderland` → *Package settings* → *Change visibility* → **Public**.
 4. La imagen por defecto es `ghcr.io/jesusregil/library-of-wonderland`: si tu usuario de GitHub es otro, cambia la línea `image:` de `docker-compose.yml` (o define `WONDERLAND_IMAGE=ghcr.io/<tu-usuario>/library-of-wonderland:latest`).
 
 ¿Prefieres construirla tú? `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.

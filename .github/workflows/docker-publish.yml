@@ -1,0 +1,105 @@
+name: Publicar imagen Docker
+
+# 1) Construye la imagen, la levanta junto con MariaDB y comprueba que la pagina, la API y el lector de PDF responden.
+# 2) Solo si todo funciona, la publica en GitHub Container Registry (ghcr.io) para que cualquiera pueda ejecutar la aplicacion con:
+#        docker compose up -d
+# (No requiere secretos: usa el GITHUB_TOKEN del propio repositorio.)
+#
+# IMPORTANTE, solo la primera vez: en GitHub ve a tu perfil -> Packages -> library-of-wonderland ->
+# Package settings -> "Change visibility" -> Public, para que se pueda descargar sin iniciar sesion.
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  prueba-imagen:
+    name: Probar que la imagen arranca
+    runs-on: ubuntu-latest
+    steps:
+      - name: Codigo
+        uses: actions/checkout@v4
+
+      - name: Construir y levantar (aplicacion + MariaDB)
+        run: docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+
+      - name: Esperar a que la aplicacion responda
+        run: |
+          for i in $(seq 1 90); do
+            if curl -fsS http://localhost:8080/up > /dev/null 2>&1; then echo "Lista tras $((i * 2)) s"; exit 0; fi
+            sleep 2
+          done
+          echo "La aplicacion no respondio a tiempo"
+          docker compose logs --no-color | tail -n 120
+          exit 1
+
+      - name: Pruebas de humo
+        run: |
+          set -e
+          base=http://localhost:8080
+          curl -fsS "$base/" | grep -q "Library of Wonderland"
+          curl -fsS "$base/catalogo" | grep -q "Libros disponibles"
+          curl -fsS "$base/login" | grep -q "Iniciar sesión"
+          curl -fsS "$base/api/v1/libros?por_pagina=50" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['meta']['total'] >= 10, d['meta']"
+          slug=$(curl -fsS "$base/api/v1/libros?por_pagina=1" | python3 -c "import json,sys; print(json.load(sys.stdin)['data'][0]['slug'])")
+          curl -fsS -o /tmp/libro.pdf "$base/leer/$slug/pdf"
+          head -c 5 /tmp/libro.pdf | grep -q "%PDF-"
+          echo "Inicio, catalogo, login, API y lector de PDF: OK"
+
+      - name: Registros del contenedor (si algo fallo)
+        if: failure()
+        run: docker compose logs --no-color | tail -n 200
+
+  publicar:
+    name: Publicar en ghcr.io
+    needs: prueba-imagen
+    runs-on: ubuntu-latest
+    steps:
+      - name: Codigo
+        uses: actions/checkout@v4
+
+      - name: Emulacion multi-arquitectura
+        uses: docker/setup-qemu-action@v3
+
+      - name: Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Iniciar sesion en ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Nombre de la imagen (ghcr.io exige minusculas)
+        id: img
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/library-of-wonderland" >> "$GITHUB_OUTPUT"
+
+      - name: Etiquetas de la imagen
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.img.outputs.name }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=tag
+            type=sha,format=short
+
+      - name: Construir y publicar
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

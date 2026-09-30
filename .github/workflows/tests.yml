@@ -1,0 +1,28 @@
+name: Pruebas
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  phpunit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_sqlite, fileinfo, zip
+          coverage: none
+
+      - name: Dependencias
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Configuración
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Pruebas (SQLite en memoria)
+        run: php artisan test
